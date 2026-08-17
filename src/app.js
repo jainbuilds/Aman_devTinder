@@ -1,17 +1,30 @@
 const express = require("express");
 const app = express();
-app.use(express.json());
+const UserModel = require("./models/user");
 
-app.use('/user',  (req, res, next) => {
-  // res.send("User routes");
-  throw new Error("User route error");
+const connectDB = require("./config/database");
+
+app.use(express.json()); 
+
+app.post("/register", async (req, res) => {
+    try {
+        const { firstName, lastName, emailId, password, age, gender } = req.body;
+        const user = new UserModel({ firstName, lastName, emailId, password, age, gender }); 
+        await user.save();
+        res.status(201).json({ message: "User registered successfully" }); 
+    } catch (error) {
+        console.error("Error registering user:", error.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
 });
 
-app.use("/", (err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send("Something went wrong!");
-});
-
-app.listen(7777, () => {
- console.log("Server is successfully listening on port 7777");
+// Connect to the database and start the server and then handle API routes
+connectDB().then(() => {
+    console.log("devTinder connected successfully");
+    app.listen(7777, () => {
+        console.log("Server is successfully listening on port 7777");
+    });
+}).catch((err) => {
+    console.error("Error connecting to the database:", err.message);
+    process.exit(1);
 });
