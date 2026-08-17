@@ -1,4 +1,5 @@
 const express = require("express");
+const { body, validationResult } = require("express-validator");
 const app = express();
 const UserModel = require("./models/user");
 
@@ -61,20 +62,97 @@ app.delete("/deleteUser", async (req, res) => {
 });
 
 // Update user by id API
-app.put("/updateUser", async (req, res) => {
-    try {
-        const userId = req.body.id;
-        const updatedData = req.body;
-        const updatedUser = await UserModel.findByIdAndUpdate(userId, updatedData);
-        if (!updatedUser) {
-            return res.status(404).json({ error: "User not found" });
+app.put(
+    "/updateUser",
+    [
+        body("id")
+            .notEmpty()
+            .withMessage("User id is required")
+            .isMongoId()
+            .withMessage("Invalid user id format"),
+        body("firstName")
+            .optional()
+            .trim()
+            .isLength({ min: 2, max: 50 })
+            .withMessage("First name must be between 2 and 50 characters")
+            .matches(/^[A-Za-z\s'-]+$/)
+            .withMessage("First name contains invalid characters"),
+        body("lastName")
+            .optional()
+            .trim()
+            .isLength({ min: 2, max: 50 })
+            .withMessage("Last name must be between 2 and 50 characters")
+            .matches(/^[A-Za-z\s'-]+$/)
+            .withMessage("Last name contains invalid characters"),
+        body("emailId")
+            .custom((value, { req }) => {
+                if (value === undefined) return true;
+                throw new Error("Email cannot be updated");
+            }),
+        body("password")
+            .optional()
+            .isLength({ min: 6, max: 128 })
+            .withMessage("Password must be between 6 and 128 characters"),
+        body("age")
+            .optional()
+            .isInt({ min: 18, max: 100 })
+            .withMessage("Age must be a number between 18 and 100"),
+        body("gender")
+            .optional()
+            .trim()
+            .isIn(["male", "female", "other"]) 
+            .withMessage("Gender must be one of: male, female, other")
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
         }
-        res.status(200).json({ message: "User updated successfully" });
-    } catch (error) {
-        console.error("Error updating user:", error.message);
-        res.status(500).json({ error: "Internal server error" });
+
+        try {
+            const { id, emailId, ...updatedData } = req.body;
+
+            const allowedFields = ["firstName", "lastName", "password", "age", "gender"];
+            const sanitizedData = {};
+
+            for (const field of allowedFields) {
+                if (updatedData[field] !== undefined) {
+                    sanitizedData[field] = updatedData[field];
+                }
+            }
+
+            if (Object.keys(sanitizedData).length === 0) {
+                return res.status(400).json({ error: "No valid fields provided for update" });
+            }
+
+            const updatedUser = await UserModel.findByIdAndUpdate(id, sanitizedData, {
+                new: true,
+                runValidators: true
+            });
+
+            if (!updatedUser) {
+                return res.status(404).json({ error: "User not found" });
+            }
+
+            res.status(200).json({
+                message: "User updated successfully",
+                user: updatedUser
+            });
+        } catch (error) {
+            console.error("Error updating user:", error.message);
+
+            if (error?.code === 11000) {
+                return res.status(409).json({ error: "Email already exists" });
+            }
+
+            if (error?.name === "ValidationError") {
+                return res.status(400).json({ error: error.message });
+            }
+
+            res.status(500).json({ error: "Internal server error" });
+        }
     }
-  });
+);
 
 // Connect to the database and start the server and then handle API routes
 connectDB().then(() => {
