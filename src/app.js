@@ -4,10 +4,12 @@ const app = express();
 const UserModel = require("./models/user");
 const  validateRegister  = require("./utils/validation");
 const bcrypt = require("bcrypt");
-
+const cookieParser = require("cookie-parser");
 const connectDB = require("./config/database");
+const jwt = require("jsonwebtoken");
 
 app.use(express.json()); 
+app.use(cookieParser());
 
 // Register API - create a new user in the database
 app.post("/register", async (req, res) => {
@@ -45,9 +47,41 @@ app.post("/login", async (req, res) => {
         if (!isMatch) {
             return res.status(401).json({ error: "Invalid credentials" });
         }
+        const token = jwt.sign({ _id: user._id }, "Aman@1009", { expiresIn: "1h" });
+        res.cookie('token', token);
         res.status(200).json({ message: "Login successful" });
     } catch (error) {
         console.error("Error logging in:", error.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+//get Profile API - get user profile by emailId
+app.get("/profile", async (req, res) => {
+    const cookieToken = req.cookies;
+    console.log("Cookie Token:", cookieToken);
+    const decoded = await jwt.verify(cookieToken.token, "Aman@1009", (err, decoded) => {
+        console.log("Decoded Token:", decoded);
+        const user =  UserModel.findById(decoded._id);
+        console.log("User from Token:", user);
+        if (err) {
+            console.error("Token verification error:", err.message);
+            return false;
+        }
+        return true;
+    });
+    if (!cookieToken) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+        const emailId = req.body.emailId;
+        const user = await UserModel.findOne({ emailId: emailId });
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        res.status(200).json(user);
+    } catch (error) {
+        console.error("Error fetching user profile:", error.message);
         res.status(500).json({ error: "Internal server error" });
     }
 });
