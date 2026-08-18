@@ -7,6 +7,7 @@ const bcrypt = require("bcrypt");
 const cookieParser = require("cookie-parser");
 const connectDB = require("./config/database");
 const jwt = require("jsonwebtoken");
+const { userAuth } = require("./middlewares/userAuth");
 
 app.use(express.json()); 
 app.use(cookieParser());
@@ -57,12 +58,12 @@ app.post("/login", async (req, res) => {
 });
 
 //get Profile API - get user profile by emailId
-app.get("/profile", async (req, res) => {
+app.get("/profile", userAuth, async (req, res) => {
     const cookieToken = req.cookies;
     console.log("Cookie Token:", cookieToken);
     const decoded = await jwt.verify(cookieToken.token, "Aman@1009", (err, decoded) => {
         console.log("Decoded Token:", decoded);
-        const user =  UserModel.findById(decoded._id);
+        const user =  req.user; // Access the user object attached by the userAuth middleware
         console.log("User from Token:", user);
         if (err) {
             console.error("Token verification error:", err.message);
@@ -86,11 +87,13 @@ app.get("/profile", async (req, res) => {
     }
 });
 
-//Feed API - get all users from the database
-app.get("/feed", async (req, res) => {
+//send connection request API - send a connection request to another user
+app.post("/sendConnectionRequest", userAuth, async (req, res) => { 
     try {
-        const users = await UserModel.find();
-        res.status(200).json(users);
+        const { targetUserId } = req.body;
+        const currentUserId = req.user._id;
+        const user =  req.user;
+        res.status(200).json(user);
     } catch (error) {
         console.error("Error fetching users:", error.message);
         res.status(500).json({ error: "Internal server error" });
