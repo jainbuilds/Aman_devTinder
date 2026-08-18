@@ -2,6 +2,8 @@ const express = require("express");
 const { body, validationResult } = require("express-validator");
 const app = express();
 const UserModel = require("./models/user");
+const  validateRegister  = require("./utils/validation");
+const bcrypt = require("bcrypt");
 
 const connectDB = require("./config/database");
 
@@ -9,13 +11,43 @@ app.use(express.json());
 
 // Register API - create a new user in the database
 app.post("/register", async (req, res) => {
+  //Validaton of data
+  const validationResult = validateRegister(req);
+  if (!validationResult.isValid) {
+      return res.status(400).json({ error: validationResult.message });
+  }
+
+  //Encrypt the password
+  const passwordHash = await bcrypt.hash(req.body.password, 10);
+
+  //creating a new instance of user model
     try {
         const { firstName, lastName, emailId, password, age, gender } = req.body;
-        const user = new UserModel({ firstName, lastName, emailId, password, age, gender }); 
+        const user = new UserModel({ firstName, lastName, emailId, password: passwordHash, age, gender }); 
         await user.save();
         res.status(201).json({ message: "User registered successfully" }); 
     } catch (error) {
         console.error("Error registering user:", error.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+//Login API - authenticate user and return a success message
+app.post("/login", async (req, res) => {
+    const { emailId, password } = req.body;
+
+    try {
+        const user = await UserModel.findOne({ emailId: emailId });
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+        res.status(200).json({ message: "Login successful" });
+    } catch (error) {
+        console.error("Error logging in:", error.message);
         res.status(500).json({ error: "Internal server error" });
     }
 });
